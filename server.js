@@ -51,6 +51,7 @@ async function downloadFile(url, filepath) {
 
 async function trimAudio(inputPath, outputPath, duration) {
     return new Promise((resolve, reject) => {
+        // duration can be fractional seconds (float)
         ffmpeg(inputPath)
             .setStartTime(0)
             .duration(duration)
@@ -73,7 +74,7 @@ async function getVideoDuration(videoPath) {
             if (err) {
                 reject(err);
             } else {
-                const duration = metadata.format.duration;
+                const duration = metadata && metadata.format ? metadata.format.duration : null;
                 resolve(duration);
             }
         });
@@ -103,6 +104,7 @@ async function stitchVideos(videoPaths, outputPath) {
             command.input(videoPath);
         });
 
+        // concatenate video streams only (strip audio)
         const filterComplex = videoPaths.map((_, index) => `[${index}:v]`).join('') + 
                              `concat=n=${videoPaths.length}:v=1:a=0[outv]`;
 
@@ -125,38 +127,64 @@ async function stitchVideos(videoPaths, outputPath) {
 async function addAudioAndOverlayToVideo(videoPath, audioPath, outputPath, overlayImagePath = null, overlayOptions = {}) {
     return new Promise((resolve, reject) => {
         try {
+            // Start from the video (video path is input 0), music as input 1, overlay (if present) as input 2
             const command = ffmpeg(videoPath).input(audioPath);
 
             if (overlayImagePath) {
-                const {
-                    position = 'bottom-right',
-                    size = '150',
-                    margin = '20'
-                } = overlayOptions;
+                command.input(overlayImagePath);
+            }
 
-                let x, y;
-                switch (position) {
-                    case 'top-left': x = margin; y = margin; break;
-                    case 'top-right': x = `W-w-${margin}`; y = margin; break;
-                    case 'bottom-left': x = margin; y = `H-h-${margin}`; break;
-                    default: x = `W-w-${margin}`; y = `H-h-${margin}`; break;
-                }
+            const {
+                position = 'bottom-right',
+                size = '150',
+                margin = '20'
+            } = overlayOptions || {};
+
+            // compute overlay coords (use ffmpeg expression syntax)
+            let x, y;
+            switch (position) {
+                case 'top-left': 
+                    x = margin; 
+                    y = margin; 
+                    break;
+                case 'top-right': 
+                    x = `W-w-${margin}`; 
+                    y = margin; 
+                    break;
+                case 'bottom-left': 
+                    x = margin; 
+                    y = `H-h-${margin}`; 
+                    break;
+                case 'bottom-right':
+                default:
+                    x = `W-w-${margin}`;
+                    y = `H-h-${margin}`;
+                    break;
+            }
+
+            // We explicitly ignore any original audio/voice in the video.
+            // Map only the music (input 1) as the audio in output.
+            if (overlayImagePath) {
+                // inputs: 0 = video, 1 = audio (music), 2 = overlay image
+                const complexFilters = [
+                    `[1:a]volume=1.0[music]`,
+                    `[2:v]scale=${size}:-1[overlay]`,
+                    // overlay image onto video, then format to yuv420p
+                    `[0:v][overlay]overlay=${x}:${y}:format=auto,format=yuv420p[vout]`
+                ];
 
                 command
-                    .complexFilter([
-                        `[1:a]volume=1.0[music]`,
-                        `[2:v]scale=${size}:-1[overlay]`,
-                        `[0:v][overlay]overlay=${x}:${y}:format=auto,format=yuv420p[v]`
-                    ])
+                    .complexFilter(complexFilters)
                     .outputOptions([
-                        '-map', '[v]',
+                        '-map', '[vout]',
                         '-map', '[music]',
                         '-c:a', 'aac',
                         '-shortest'
                     ]);
             } else {
+                // No overlay image; just use video frames (0:v) and music (1:a)
                 command
-                    .complexFilter('[1:a]volume=1.0[music]')
+                    .complexFilter([`[1:a]volume=1.0[music]`])
                     .outputOptions([
                         '-map', '0:v:0',
                         '-map', '[music]',
@@ -172,7 +200,10 @@ async function addAudioAndOverlayToVideo(videoPath, audioPath, outputPath, overl
                     console.log('Audio + overlay added (ignoring original audio)');
                     resolve();
                 })
-                .on('error', reject)
+                .on('error', (err) => {
+                    console.error('addAudioAndOverlayToVideo error:', err);
+                    reject(err);
+                })
                 .run();
         } catch (err) {
             reject(err);
@@ -187,7 +218,7 @@ async function addOverlayToImage(baseImagePath, overlayImagePath, outputPath, ov
             size = '150',
             margin = '20'
         } = overlayOptions;
-        
+
         let x, y;
         switch (position) {
             case 'top-left': x = margin; y = margin; break;
@@ -195,7 +226,7 @@ async function addOverlayToImage(baseImagePath, overlayImagePath, outputPath, ov
             case 'bottom-left': x = margin; y = `H-h-${margin}`; break;
             default: x = `W-w-${margin}`; y = `H-h-${margin}`; break;
         }
-        
+
         ffmpeg()
             .input(baseImagePath)
             .input(overlayImagePath)
@@ -211,6 +242,7 @@ async function addOverlayToImage(baseImagePath, overlayImagePath, outputPath, ov
             })
             .on('error', (err) => {
                 console.error('Image overlay processing error:', err);
+                // fallback: copy original base image to output
                 require('fs').createReadStream(baseImagePath).pipe(require('fs').createWriteStream(outputPath))
                     .on('close', () => {
                         console.log('Fallback: returned original image without overlay');
@@ -221,6 +253,8 @@ async function addOverlayToImage(baseImagePath, overlayImagePath, outputPath, ov
             .run();
     });
 }
+
+// ----------------- Routes -----------------
 
 app.post('/api/add-overlay', async (req, res) => {
     const jobId = uuidv4();
@@ -248,6 +282,9 @@ app.post('/api/add-overlay', async (req, res) => {
         await downloadFile(final_music_url, audioPath);
 
         const videoDuration = await getVideoDuration(videoPath);
+        if (!videoDuration) {
+            throw new Error('Could not determine video duration');
+        }
         await trimAudio(audioPath, trimmedAudioPath, videoDuration);
 
         let overlayImagePath = null;
@@ -284,6 +321,8 @@ app.post('/api/add-overlay', async (req, res) => {
 
     } catch (error) {
         console.error(`Job ${jobId} failed:`, error);
+        // try to cleanup jobDir if exists
+        try { await fs.rm(path.join(TEMP_DIR, jobId), { recursive: true, force: true }); } catch (_) {}
         res.status(500).json({
             success: false,
             error: error.message,
@@ -341,6 +380,7 @@ app.post('/api/add-image-overlay', async (req, res) => {
 
     } catch (error) {
         console.error(`Image overlay job ${jobId} failed:`, error);
+        try { await fs.rm(path.join(TEMP_DIR, jobId), { recursive: true, force: true }); } catch (_) {}
         res.status(500).json({
             success: false,
             error: error.message,
@@ -398,6 +438,9 @@ app.post('/api/stitch-videos', async (req, res) => {
 
         console.log('Step 5: Trim audio to stitched video duration...');
         const stitchedDuration = await getVideoDuration(stitchedVideoPath);
+        if (!stitchedDuration) {
+            throw new Error('Could not determine stitched video duration');
+        }
         const trimmedAudioPath = path.join(jobDir, 'audio_trimmed.mp3');
         await trimAudio(audioPath, trimmedAudioPath, stitchedDuration);
 
@@ -430,6 +473,7 @@ app.post('/api/stitch-videos', async (req, res) => {
 
     } catch (error) {
         console.error(`Job ${jobId} failed:`, error);
+        try { await fs.rm(path.join(TEMP_DIR, jobId), { recursive: true, force: true }); } catch (_) {}
         res.status(500).json({
             success: false,
             error: error.message,
@@ -511,6 +555,118 @@ app.get('/stream/:jobId', async (req, res) => {
         
         await fs.access(filePath);
         const stats = await fs.stat(filePath);
-        
+
+        // Support range requests for proper streaming/seeking
+        const range = req.headers.range;
+        if (!range) {
+            // no range header — send the entire file
+            res.setHeader('Content-Type', 'video/mp4');
+            res.setHeader('Content-Length', stats.size);
+            res.setHeader('Accept-Ranges', 'bytes');
+            const fileStream = require('fs').createReadStream(filePath);
+            return fileStream.pipe(res);
+        }
+
+        // Parse range header, e.g. "bytes=0-"
+        const parts = range.replace(/bytes=/, '').split('-');
+        const start = parseInt(parts[0], 10);
+        const end = parts[1] ? parseInt(parts[1], 10) : stats.size - 1;
+        const chunkSize = (end - start) + 1;
+
+        res.status(206);
+        res.setHeader('Content-Range', `bytes ${start}-${end}/${stats.size}`);
+        res.setHeader('Accept-Ranges', 'bytes');
+        res.setHeader('Content-Length', chunkSize);
         res.setHeader('Content-Type', 'video/mp4');
-        res.setHeader('
+
+        const stream = require('fs').createReadStream(filePath, { start, end });
+        stream.pipe(res);
+
+    } catch (error) {
+        res.status(404).json({ 
+            error: 'Video file not found or not accessible',
+            details: error.message 
+        });
+    }
+});
+
+app.get('/api/status/:jobId', async (req, res) => {
+    try {
+        const { jobId } = req.params;
+        const filePath = path.join(OUTPUT_DIR, `final_video_${jobId}.mp4`);
+        
+        try {
+            await fs.access(filePath);
+            const stats = await fs.stat(filePath);
+            const duration = await getVideoDuration(filePath);
+            
+            res.json({
+                status: 'completed',
+                jobId: jobId,
+                completed: true,
+                downloadUrl: `/download/${jobId}`,
+                streamUrl: `/stream/${jobId}`,
+                finalVideoUrl: `${req.protocol}://${req.get('host')}/download/${jobId}`,
+                videoStats: {
+                    duration: duration,
+                    fileSize: stats.size,
+                    fileSizeMB: (stats.size / (1024 * 1024)).toFixed(2),
+                    createdAt: stats.birthtime
+                }
+            });
+        } catch (error) {
+            res.json({
+                status: 'processing',
+                jobId: jobId,
+                completed: false,
+                message: 'Video is still being processed or job not found'
+            });
+        }
+        
+    } catch (error) {
+        res.status(500).json({
+            status: 'error',
+            jobId: req.params.jobId,
+            completed: false,
+            error: error.message
+        });
+    }
+});
+
+app.get('/health', (req, res) => {
+    res.json({ 
+        status: 'OK', 
+        service: 'Integrated Video Processing Service',
+        timestamp: new Date().toISOString()
+    });
+});
+
+app.get('/', (req, res) => {
+    res.json({
+        service: 'Integrated Video Processing Service',
+        version: '5.0.0',
+        endpoints: {
+            addOverlay: 'POST /api/add-overlay (single video + audio + overlay)',
+            addImageOverlay: 'POST /api/add-image-overlay (image + overlay)',
+            stitchVideos: 'POST /api/stitch-videos (multiple videos + audio + overlay)',
+            download: 'GET /download/:jobId (download video file)',
+            downloadImage: 'GET /download-image/:jobId (download image file)',
+            serveImage: 'GET /serve-image/:jobId (serve image binary)',
+            stream: 'GET /stream/:jobId (stream video in browser)',
+            status: 'GET /api/status/:jobId (check job status)',
+            health: 'GET /health'
+        }
+    });
+});
+
+async function startServer() {
+    await ensureDirectories();
+    
+    app.listen(PORT, () => {
+        console.log(`Integrated Video Processing Service running on port ${PORT}`);
+        console.log(`Health check: http://localhost:${PORT}/health`);
+        console.log(`API documentation: http://localhost:${PORT}/`);
+    });
+}
+
+startServer().catch(console.error);
