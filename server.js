@@ -7,7 +7,6 @@ const fs = require('fs').promises;
 const path = require('path');
 const { v4: uuidv4 } = require('uuid');
 
-const ffmpeg = require('fluent-ffmpeg');
 const ffmpegPath = require('@ffmpeg-installer/ffmpeg').path;
 const ffprobePath = require('@ffprobe-installer/ffprobe').path;
 
