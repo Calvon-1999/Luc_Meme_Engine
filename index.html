@@ -1,0 +1,491 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Luna Video Processor</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+
+        .container {
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+            padding: 40px;
+            max-width: 500px;
+            width: 100%;
+            animation: slideUp 0.6s ease-out;
+        }
+
+        @keyframes slideUp {
+            from {
+                opacity: 0;
+                transform: translateY(30px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .logo {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+
+        .logo h1 {
+            color: #4a5568;
+            font-size: 2.5rem;
+            font-weight: 700;
+            margin-bottom: 10px;
+        }
+
+        .logo p {
+            color: #718096;
+            font-size: 1.1rem;
+        }
+
+        .form-group {
+            margin-bottom: 25px;
+        }
+
+        label {
+            display: block;
+            color: #4a5568;
+            font-weight: 600;
+            margin-bottom: 8px;
+            font-size: 0.95rem;
+        }
+
+        input[type="text"], input[type="url"], textarea, input[type="file"] {
+            width: 100%;
+            padding: 12px 16px;
+            border: 2px solid #e2e8f0;
+            border-radius: 12px;
+            font-size: 1rem;
+            transition: all 0.3s ease;
+            background: #f8fafc;
+        }
+
+        input[type="text"]:focus, input[type="url"]:focus, textarea:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+            background: white;
+        }
+
+        textarea {
+            resize: vertical;
+            min-height: 100px;
+            font-family: inherit;
+        }
+
+        .file-upload {
+            position: relative;
+            display: inline-block;
+            width: 100%;
+        }
+
+        .file-upload input[type="file"] {
+            opacity: 0;
+            position: absolute;
+            z-index: -1;
+        }
+
+        .file-upload-label {
+            display: block;
+            padding: 12px 16px;
+            border: 2px dashed #cbd5e0;
+            border-radius: 12px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            background: #f8fafc;
+            color: #718096;
+        }
+
+        .file-upload-label:hover {
+            border-color: #667eea;
+            background: #edf2f7;
+        }
+
+        .file-upload-label.has-file {
+            border-color: #48bb78;
+            background: #f0fff4;
+            color: #2d3748;
+        }
+
+        .submit-btn {
+            width: 100%;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 15px 20px;
+            border-radius: 12px;
+            font-size: 1.1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+            margin-top: 10px;
+        }
+
+        .submit-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 25px rgba(102, 126, 234, 0.3);
+        }
+
+        .submit-btn:disabled {
+            opacity: 0.7;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .result {
+            margin-top: 30px;
+            padding: 20px;
+            border-radius: 12px;
+            display: none;
+        }
+
+        .result.success {
+            background: #f0fff4;
+            border: 1px solid #9ae6b4;
+            color: #22543d;
+        }
+
+        .result.error {
+            background: #fed7d7;
+            border: 1px solid #feb2b2;
+            color: #c53030;
+        }
+
+        .loading {
+            display: none;
+            text-align: center;
+            margin-top: 20px;
+        }
+
+        .spinner {
+            border: 3px solid #e2e8f0;
+            border-top: 3px solid #667eea;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 15px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .download-link {
+            display: inline-block;
+            margin-top: 15px;
+            padding: 10px 20px;
+            background: #48bb78;
+            color: white;
+            text-decoration: none;
+            border-radius: 8px;
+            font-weight: 600;
+            transition: background 0.2s ease;
+        }
+
+        .download-link:hover {
+            background: #38a169;
+        }
+
+        .or-divider {
+            text-align: center;
+            margin: 20px 0;
+            color: #a0aec0;
+            font-weight: 500;
+            position: relative;
+        }
+
+        .or-divider::before {
+            content: '';
+            position: absolute;
+            top: 50%;
+            left: 0;
+            right: 0;
+            height: 1px;
+            background: #e2e8f0;
+            z-index: 0;
+        }
+
+        .or-divider span {
+            background: white;
+            padding: 0 15px;
+            position: relative;
+            z-index: 1;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="logo">
+            <h1>🎬 Luna</h1>
+            <p>Video Processing Studio</p>
+        </div>
+
+        <form id="videoForm">
+            <div class="form-group">
+                <label for="username">Username</label>
+                <input type="text" id="username" name="username" required placeholder="Enter your username">
+            </div>
+
+            <div class="form-group">
+                <label for="tweet">Your Message</label>
+                <textarea id="tweet" name="tweet" required placeholder="Write your message here..."></textarea>
+            </div>
+
+            <div class="form-group">
+                <label>Upload Image</label>
+                <div class="file-upload">
+                    <input type="file" id="imageFile" accept="image/*">
+                    <label for="imageFile" class="file-upload-label" id="fileLabel">
+                        📸 Click to upload image or drag and drop
+                    </label>
+                </div>
+            </div>
+
+            <div class="or-divider">
+                <span>OR</span>
+            </div>
+
+            <div class="form-group">
+                <label for="imageUrl">Image URL</label>
+                <input type="url" id="imageUrl" name="imageUrl" placeholder="https://example.com/image.jpg">
+            </div>
+
+            <button type="submit" class="submit-btn" id="submitBtn">
+                🚀 Create Video
+            </button>
+        </form>
+
+        <div class="loading" id="loading">
+            <div class="spinner"></div>
+            <p>Processing your video... This may take a few moments.</p>
+        </div>
+
+        <div class="result" id="result"></div>
+    </div>
+
+    <script>
+        const form = document.getElementById('videoForm');
+        const fileInput = document.getElementById('imageFile');
+        const fileLabel = document.getElementById('fileLabel');
+        const submitBtn = document.getElementById('submitBtn');
+        const loading = document.getElementById('loading');
+        const result = document.getElementById('result');
+
+        // File upload handling
+        fileInput.addEventListener('change', function(e) {
+            if (e.target.files.length > 0) {
+                const fileName = e.target.files[0].name;
+                fileLabel.textContent = `📎 Selected: ${fileName}`;
+                fileLabel.classList.add('has-file');
+                // Clear URL field when file is selected
+                document.getElementById('imageUrl').value = '';
+            } else {
+                fileLabel.textContent = '📸 Click to upload image or drag and drop';
+                fileLabel.classList.remove('has-file');
+            }
+        });
+
+        // Clear file when URL is entered
+        document.getElementById('imageUrl').addEventListener('input', function(e) {
+            if (e.target.value) {
+                fileInput.value = '';
+                fileLabel.textContent = '📸 Click to upload image or drag and drop';
+                fileLabel.classList.remove('has-file');
+            }
+        });
+
+        // Form submission
+        form.addEventListener('submit', async function(e) {
+            e.preventDefault();
+            
+            const formData = new FormData();
+            const username = document.getElementById('username').value;
+            const tweet = document.getElementById('tweet').value;
+            const imageFile = fileInput.files[0];
+            const imageUrl = document.getElementById('imageUrl').value;
+
+            // Add required fields
+            formData.append('username', username);
+            formData.append('tweet', tweet);
+
+            // Add image (file or URL, or null)
+            if (imageFile) {
+                formData.append('image', imageFile);
+            } else if (imageUrl) {
+                formData.append('imageUrl', imageUrl);
+            } else {
+                formData.append('image', 'null');
+            }
+
+            // Show loading with realistic timeline
+            submitBtn.disabled = true;
+            loading.style.display = 'block';
+            result.style.display = 'none';
+            
+            // Update loading message
+            document.querySelector('.loading p').innerHTML = `
+                🎬 Creating your video...<br>
+                <small>Please don't close this page!</small>
+            `;
+
+            try {
+                // Step 1: Create the video job
+                const response = await fetch('/api/create-video', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                const data = await response.json();
+
+                if (response.ok && data.uuid) {
+                    // Step 2: Start polling for completion
+                    await pollForCompletion(data.uuid);
+                } else {
+                    throw new Error(data.error || 'Failed to start video creation');
+                }
+            } catch (error) {
+                result.className = 'result error';
+                result.innerHTML = `
+                    <h3>❌ Error</h3>
+                    <p>${error.message}</p>
+                    <p>Please try again or contact support.</p>
+                `;
+                submitBtn.disabled = false;
+                loading.style.display = 'none';
+                result.style.display = 'block';
+            }
+        });
+
+        // Poll for video completion
+        async function pollForCompletion(uuid) {
+            let attempts = 0;
+            
+            const checkStatus = async () => {
+                attempts++;
+                
+                try {
+                    const response = await fetch(`/api/status/${uuid}`);
+                    const data = await response.json();
+                    
+                    if (data.status === 'stitched' && data.final_stitch_video) {
+                        // Success! Video is ready
+                        result.className = 'result success';
+                        result.innerHTML = `
+                            <h3>🎉 Your Video is Ready!</h3>
+                            <p><strong>UUID:</strong> ${uuid}</p>
+                            <a href="${data.final_stitch_video}" class="download-link" target="_blank">
+                                🎬 Watch Your Video
+                            </a>
+                            <br>
+                            <a href="${data.final_stitch_video}" class="download-link" download style="margin-top: 10px; background: #4299e1;">
+                                📥 Download Video
+                            </a>
+                        `;
+                        
+                        submitBtn.disabled = false;
+                        loading.style.display = 'none';
+                        result.style.display = 'block';
+                        
+                    } else if (data.status === 'failed' || data.error_message) {
+                        // Failed
+                        throw new Error(data.error_message || 'Video processing failed');
+                        
+                    } else {
+                        // Still processing - simple status update
+                        document.querySelector('.loading p').innerHTML = `
+                            🎬 Processing your video...<br>
+                            <small>Status: ${data.status || 'Processing'} • Please wait...</small>
+                        `;
+                        
+                        // Continue polling
+                        setTimeout(checkStatus, 5000); // Check every 5 seconds
+                    }
+                    
+                } catch (error) {
+                    result.className = 'result error';
+                    result.innerHTML = `
+                        <h3>❌ Processing Failed</h3>
+                        <p>${error.message}</p>
+                        <p><strong>UUID:</strong> ${uuid} (save this for support)</p>
+                        <button onclick="location.reload()" style="margin-top: 15px; padding: 10px 20px; background: #667eea; color: white; border: none; border-radius: 8px; cursor: pointer;">
+                            🔄 Try Again
+                        </button>
+                    `;
+                    
+                    submitBtn.disabled = false;
+                    loading.style.display = 'none';
+                    result.style.display = 'block';
+                }
+            };
+            
+            // Start checking immediately
+            checkStatus();
+        }
+
+        // Drag and drop functionality
+        const container = document.querySelector('.container');
+        
+        ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+            container.addEventListener(eventName, preventDefaults, false);
+        });
+
+        function preventDefaults(e) {
+            e.preventDefault();
+            e.stopPropagation();
+        }
+
+        ['dragenter', 'dragover'].forEach(eventName => {
+            container.addEventListener(eventName, highlight, false);
+        });
+
+        ['dragleave', 'drop'].forEach(eventName => {
+            container.addEventListener(eventName, unhighlight, false);
+        });
+
+        function highlight(e) {
+            container.style.background = '#f0f4ff';
+        }
+
+        function unhighlight(e) {
+            container.style.background = 'white';
+        }
+
+        container.addEventListener('drop', handleDrop, false);
+
+        function handleDrop(e) {
+            const dt = e.dataTransfer;
+            const files = dt.files;
+
+            if (files.length > 0 && files[0].type.startsWith('image/')) {
+                fileInput.files = files;
+                const event = new Event('change', { bubbles: true });
+                fileInput.dispatchEvent(event);
+            }
+        }
+    </script>
+</body>
+</html>
