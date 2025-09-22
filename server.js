@@ -8,6 +8,12 @@ const fs = require('fs').promises;
 const path = require('path');
 const { v4: uuidv4 } = require('uuid');
 
+// Set ffmpeg and ffprobe paths
+const ffmpegPath = '/usr/bin/ffmpeg';
+const ffprobePath = '/usr/bin/ffprobe';
+ffmpeg.setFfmpegPath(ffmpegPath);
+ffmpeg.setFfprobePath(ffprobePath);
+
 const app = express();
 const PORT = process.env.PORT || 8080;
 
